@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ff4f7e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="漢字マスター">
+<meta name="mobile-web-app-capable" content="yes">
+<title>漢字マスター AI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; font-family: -apple-system, "Hiragino Maru Gothic ProN", "ヒラギノ丸ゴ ProN W4", "游ゴシック", "メイリオ", sans-serif; }
+  body {
+    background: linear-gradient(135deg, #ffb3d9 0%, #ffe085 50%, #85d6ff 100%);
+    color: #3d2a4e;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    -webkit-user-select: none;
+    user-select: none;
+    overflow-x: hidden;
+  }
+
+  /* ===== ヘッダー ===== */
+  header {
+    position: relative;
+    padding: 14px 16px;
+    text-align: center;
+    background: rgba(255,255,255,0.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 3px solid rgba(255,255,255,0.7);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 20px;
+    color: #ff4f7e;
+    text-shadow: 2px 2px 0 #fff;
+    letter-spacing: 3px;
+  }
+  .points-badge {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #ffd93d, #ff9500);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 13px;
+    box-shadow: 0 3px 10px rgba(255,149,0,0.4);
+    cursor: pointer;
+    border: 2px solid white;
+  }
+  .points-badge:active { transform: translateY(-50%) scale(0.94); }
+
+  /* ===== ガイドカード ===== */
+  .guide {
+    margin: 12px 16px 8px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.85);
+    border-radius: 18px;
+    text-align: center;
+    font-size: 13px;
+    color: #3d2a4e;
+    border: 2px dashed #ff9dc0;
+    flex-shrink: 0;
+  }
+  .guide b { color: #ff4f7e; }
+
+  /* ===== カメラ ===== */
+  .camera-wrap {
+    flex: 1;
+    position: relative;
+    margin: 0 16px;
+    background: #111;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    border: 3px solid white;
+    min-height: 220px;
+  }
+  #video, #snapshot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #video { object-fit: cover; }
+  #snapshot { object-fit: contain; background: white; display: none; }
+  .paper-frame {
+    position: absolute;
+    inset: 8%;
+    border: 4px dashed rgba(255,255,255,0.9);
+    border-radius: 12px;
+    pointer-events: none;
+  }
+  .paper-frame::before {
+    content: "テスト用紙をこの枠に";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,79,126,0.9);
+    color: white;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+
+  /* ===== 下部ボタン ===== */
+  .controls-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    flex-shrink: 0;
+  }
+  .shutter {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: white;
+    border: 5px solid #ff4f7e;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(255,79,126,0.4);
+    transition: transform 0.12s;
+    padding: 0;
+  }
+  .shutter:active { transform: scale(0.92); }
+  .shutter::after {
+    content: "";
+    display: block;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg,#ff6b9d,#ff4f7e);
+    margin: 5px auto;
+  }
+  .side-btn {
+    background: rgba(255,255,255,0.92);
+    border: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-size: 22px;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+  }
+  .score-btn {
+    background: linear-gradient(135deg,#ff4f7e,#ff9500);
+    color: white;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 30px;
+    font-size: 17px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(255,79,126,0.4);
+    letter-spacing: 2px;
+  }
+  .score-btn:active { transform: scale(0.96); }
+  .score-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .retake-btn {
+    background: white;
+    color: #666;
+    border: 2px solid #ddd;
+    padding: 12px 20px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  /* ===== オーバーレイ ===== */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(61,42,78,0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 16px;
+  }
+  .overlay.active { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 28px;
+    padding: 20px 18px 16px;
+    width: 100%;
+    max-width: 420px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    text-align: center;
+    position: relative;
+    animation: pop 0.3s ease-out;
+  }
+  @keyframes pop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .close-x {
+    position: absolute;
+    top: 10px; right: 14px;
+    background: none; border: none;
+    font-size: 26px; color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .loader {
+    display: inline-block;
+    width: 54px; height: 54px;
+    border: 6px solid #ffd6e4;
+    border-top-color: #ff4f7e;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 14px auto 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===== 採点結果 ===== */
+  .result-summary {
+    background: linear-gradient(135deg, #fff0f6, #fffaf0);
+    border-radius: 18px;
+    padding: 16px 12px;
+    margin-bottom: 10px;
+  }
+  .score-number {
+    font-size: 64px;
+    font-weight: bold;
+    background: linear-gradient(135deg,#ff4f7e,#ff9500);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1;
+  }
+  .score-label { color: #888; font-size: 13px; letter-spacing: 1px; }
+  .correct-ratio {
+    font-size: 22px;
+    font-weight: bold;
+    color: #3d2a4e;
+    margin-top: 6px;
+  }
+  .correct-ratio .num { color: #ff4f7e; font-size: 28px; }
+  .stars { font-size: 26px; letter-spacing: 4px; color: #ffd93d; margin-top: 4px; }
+  .overall-comment {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 12px;
+    font-size: 13px;
+    color: #3d2a4e;
+    line-height: 1.5;
+  }
+  .gained-points {
+    display: inline-block;
+    background: linear-gradient(135deg,#ffd93d,#ff9500);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 16px;
+    font-weight: bold;
+    margin-top: 10px;
+    animation: bounce 0.6s;
+  }
+  @keyframes bounce {
+    0%,100% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+  }
+
+  /* 問題ごとのカード */
+  .item-list { text-align: left; margin-top: 12px; }
+  .item-card {
+    border: 2px solid #eee;
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: white;
+  }
+  .item-card.correct { border-color: #6fd19a; background: #f0fff4; }
+  .item-card.wrong   { border-color: #ff9dc0; background: #fff5f7; }
+  .item-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .item-num {
+    background: #3d2a4e;
+    color: white;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .item-mark {
+    font-size: 22px;
+    margin-left: auto;
+  }
+  .item-kanji-row {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    margin: 6px 0 4px;
+    font-size: 13px;
+    color: #666;
+    flex-wrap: wrap;
+  }
+  .item-kanji-row .big {
+    font-size: 22px;
+    font-family: "Yu Mincho", "游明朝", serif;
+    color: #3d2a4e;
+    font-weight: bold;
+  }
+  .item-kanji-row .diff { color: #ff4f7e; }
+  .item-q {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .item-handwriting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    margin: 4px 0;
+  }
+  .handwriting-bar {
+    flex: 1;
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .handwriting-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg,#ff4f7e,#ff9500);
+    border-radius: 4px;
+  }
+  .item-feedback {
+    font-size: 12px;
+    color: #555;
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+  .item-feedback b { color: #ff4f7e; }
+
+  /* ===== ご褒美 ===== */
+  .reward-list { margin-top: 14px; text-align: left; }
+  .reward-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    background: linear-gradient(90deg, #fff0f6, #fffaf0);
+    margin-bottom: 8px;
+    border-radius: 14px;
+    border: 2px solid transparent;
+  }
+  .reward-item.can { border-color: #ffd93d; }
+  .reward-emoji { font-size: 28px; margin-right: 10px; }
+  .reward-body { flex: 1; min-width: 0; }
+  .reward-name { font-weight: bold; font-size: 14px; }
+  .reward-cost { color: #ff9500; font-weight: bold; font-size: 12px; margin-top: 2px; }
+  .reward-redeem {
+    background: linear-gradient(135deg,#ff4f7e,#ff9500);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .reward-redeem:disabled {
+    background: #ddd;
+    cursor: not-allowed;
+  }
+
+  /* ===== 紙吹雪 ===== */
+  .confetti {
+    position: fixed;
+    pointer-events: none;
+    width: 10px; height: 10px;
+    z-index: 200;
+    animation: fall 2.5s ease-out forwards;
+  }
+  @keyframes fall {
+    to { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>漢字マスター AI</h1>
+  <button class="points-badge" onclick="openRewards()">
+    🏆 <span id="pointsDisplay">0</span> pt
+  </button>
+</header>
+
+<!-- 使い方ガイド -->
+<div class="guide" id="guide">
+  <b>📄 テスト用紙を1枚まるごと撮影してね</b><br>
+  <span style="font-size:11px;color:#666">明るい場所で、紙全体が入るようにまっすぐ撮ろう</span>
+</div>
+
+<!-- カメラエリア -->
+<div class="camera-wrap">
+  <video id="video" autoplay playsinline muted></video>
+  <img id="snapshot" alt="撮影したテスト">
+  <canvas id="canvas" style="display:none"></canvas>
+  <div class="paper-frame" id="frame"></div>
+</div>
+
+<!-- 撮影前のコントロール -->
+<div class="controls-row" id="controls">
+  <button class="side-btn" onclick="switchCamera()" aria-label="カメラ切替">⇋</button>
+  <button class="shutter" onclick="capture()" aria-label="撮影"></button>
+  <div style="width:48px"></div>
+</div>
+
+<!-- 撮影後のコントロール -->
+<div class="controls-row" id="scoreControls" style="display:none">
+  <button class="retake-btn" onclick="retake()">撮り直し</button>
+  <button class="score-btn" onclick="scoreTest()">採点する！</button>
+</div>
+
+<!-- 採点中 -->
+<div class="overlay" id="loadingOverlay">
+  <div class="modal">
+    <div class="loader"></div>
+    <div style="font-size:18px;font-weight:bold;color:#ff4f7e">AI が採点しています...</div>
+    <div style="font-size:13px;color:#888;margin-top:6px">
+      問題を読んで、答えをチェック中 ✨<br>
+      <span style="font-size:11px">（30秒ほどかかります）</span>
+    </div>
+  </div>
+</div>
+
+<!-- 採点結果 -->
+<div class="overlay" id="resultOverlay">
+  <div class="modal">
+    <button class="close-x" onclick="closeResult()">×</button>
+
+    <div class="result-summary">
+      <div class="score-label">総合スコア</div>
+      <div class="score-number" id="scoreNumber">-</div>
+      <div class="stars" id="scoreStars">☆☆☆☆☆</div>
+      <div class="correct-ratio">
+        <span class="num" id="correctCount">0</span> / <span id="totalCount">0</span> 問 正解
+      </div>
+      <div class="overall-comment" id="overallComment">-</div>
+      <div class="gained-points" id="gainedPoints" style="display:none">+0 pt</div>
+    </div>
+
+    <div style="font-weight:bold;color:#ff4f7e;font-size:14px;margin:12px 0 4px;text-align:left">
+      📝 問題ごとの結果
+    </div>
+    <div class="item-list" id="itemList"></div>
+
+    <button class="score-btn" style="margin-top:10px;width:100%" onclick="closeResult()">
+      つぎのテストへ！
+    </button>
+  </div>
+</div>
+
+<!-- ご褒美 -->
+<div class="overlay" id="rewardsOverlay">
+  <div class="modal">
+    <button class="close-x" onclick="closeRewards()">×</button>
+    <div style="font-size:22px;font-weight:bold;color:#ff4f7e">🎁 ごほうび交換所</div>
+    <div style="color:#888;font-size:13px;margin-top:4px">
+      現在 <span id="currentPt" style="color:#ff9500;font-weight:bold">0</span> pt
+    </div>
+    <div class="reward-list" id="rewardList"></div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// ご褒美リスト（シンプル版）
+// e=絵文字、n=名前、c=必要ポイント
+// ============================================
+const REWARDS = [
+  {e:'🍭', n:'飴 1個',                 c:10},
+  {e:'🧃', n:'ジュース 1本',           c:15},
+  {e:'🍦', n:'アイス 1個',             c:20},
+  {e:'🎮', n:'ゲーム 30分',            c:30},
+  {e:'💰', n:'おこづかい 100円',       c:50},
+  {e:'🍜', n:'好きな夕食をリクエスト', c:80},
+  // ここにご褒美を追加！
+];
+
+// ============================================
+// システムプロンプト（採点の厳しさはここを編集）
+// ============================================
+const systemPrompt = `あなたは小学生の漢字テストを採点する先生です。
+画像は、子どもが書いた漢字テストの答案用紙です。
+
+【採点の手順】
+1. テスト内のすべての設問を認識する（問題番号、問題文、解答欄）。
+2. 各設問について、問題文（例：「ひらがなを漢字に直しなさい」「読み方を書きなさい」等）から正解を推測する。
+3. 解答欄に手書きされた文字を読み取る。
+4. 正誤を判定（文字・送り仮名も含めて完全一致なら正解、違えば不正解）。
+5. 書き方（字形バランス、とめ・はね・はらい、線の長短）を 0〜100 点で評価する。採点は「小学生向けの標準バランス基準」で、やさしめに。
+6. 良い点と改善点を一言ずつ、子どもが前向きになれる言葉で。
+
+【出力】
+必ず以下のJSON形式のみで返答してください（前後に余計な文字を入れない）。必ず日本語で返答してください。
+設問が読み取れない場合は items を空配列にして overall_comment で理由を説明してください。
+{
+  "total_questions": 問題数の整数,
+  "correct_count": 正解数の整数,
+  "overall_score": 総合点 0〜100の整数,
+  "overall_comment": "全体のコメント（40字以内、はげましの言葉）",
+  "items": [
+    {
+      "no": 問題番号,
+      "question": "問題文の要約（20字以内、読み取れなければ空文字）",
+      "correct_kanji": "正解の文字列",
+      "student_answer": "解答欄に書かれた文字列（読み取った結果）",
+      "is_correct": true または false,
+      "handwriting_score": 書き方の点数 0〜100の整数,
+      "good": "書き方のよい点（20字以内）",
+      "improve": "書き方の改善点（20字以内）"
+    }
+  ]
+}`;
+
+// ============================================
+// アプリの状態
+// ============================================
+let currentStream = null;
+let usingFrontCamera = false;
+let capturedImageData = null;
+let points = Number(localStorage.getItem('km_points') || 0);
+
+const $ = id => document.getElementById(id);
+
+// ============================================
+// 起動
+// ============================================
+window.addEventListener('load', async () => {
+  updatePointsDisplay();
+  await startCamera();
+});
+
+// ============================================
+// カメラ起動
+// ============================================
+async function startCamera(){
+  try {
+    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('このブラウザはカメラに対応していません。Chrome または Firefox で開いてください。');
+      return;
+    }
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: usingFrontCamera ? 'user' : { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1920 }
+      }
+    };
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    $('video').srcObject = currentStream;
+  } catch (e) {
+    alert('カメラを起動できませんでした。\nブラウザの許可設定を確認してください。\n\n' + e.message);
+    console.error(e);
+  }
+}
+
+async function switchCamera(){
+  usingFrontCamera = !usingFrontCamera;
+  await startCamera();
+}
+
+// ============================================
+// 撮影（テスト用紙全体を保持、長辺を最大1600pxに縮小）
+// ============================================
+function capture(){
+  const video  = $('video');
+  const canvas = $('canvas');
+  if (!video.videoWidth) return;
+
+  const MAX = 1600;
+  let w = video.videoWidth;
+  let h = video.videoHeight;
+  const scale = Math.min(1, MAX / Math.max(w, h));
+  w = Math.round(w * scale);
+  h = Math.round(h * scale);
+  canvas.width  = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, w, h);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  capturedImageData = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+
+  $('snapshot').src = dataUrl;
+  $('snapshot').style.display = 'block';
+  $('video').style.display    = 'none';
+  $('frame').style.display    = 'none';
+  $('controls').style.display      = 'none';
+  $('scoreControls').style.display = 'flex';
+  $('guide').innerHTML =
+    '<b>✅ これで採点しますか？</b><br>' +
+    '<span style="font-size:11px;color:#666">文字がぼやけていたら撮り直してね</span>';
+}
+
+function retake(){
+  capturedImageData = null;
+  $('snapshot').style.display = 'none';
+  $('video').style.display    = 'block';
+  $('frame').style.display    = 'block';
+  $('controls').style.display      = 'flex';
+  $('scoreControls').style.display = 'none';
+  $('guide').innerHTML =
+    '<b>📄 テスト用紙を1枚まるごと撮影してね</b><br>' +
+    '<span style="font-size:11px;color:#666">明るい場所で、紙全体が入るようにまっすぐ撮ろう</span>';
+}
+
+// ============================================
+// 採点：Anthropic API を呼び出す
+// ============================================
+async function scoreTest(){
+  if (!capturedImageData) return;
+  $('loadingOverlay').classList.add('active');
+
+  let result;
+  try {
+    const body = {
+      model: 'claude-sonnet-4-6',          // テスト全体を読むのでSonnetのほうが賢い
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/jpeg',
+              data: capturedImageData
+            }
+          },
+          {
+            type: 'text',
+            text: 'このテスト用紙を採点してください。必ず指定のJSON形式のみで返答してください。'
+          }
+        ]
+      }]
+    };
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'sk-ant-ここにあなたのAPIキーを入力',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('API error:', res.status, errText);
+      throw new Error('API error ' + res.status);
+    }
+
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('JSON not found');
+    result = JSON.parse(m[0]);
+
+  } catch (e) {
+    // APIキー未設定／エラー時はデモデータ
+    console.warn('採点失敗のためデモデータを表示します：', e);
+    result = {
+      total_questions: 3,
+      correct_count:   2,
+      overall_score:   72,
+      overall_comment: '(デモ) よくがんばりました！次もこの調子で！',
+      items: [
+        {no:1, question:'(デモ) 読みを漢字に', correct_kanji:'議論', student_answer:'議論',
+         is_correct:true,  handwriting_score:85, good:'とめがきれい', improve:'横画の長さをそろえよう'},
+        {no:2, question:'(デモ) 読みを漢字に', correct_kanji:'権利', student_answer:'権利',
+         is_correct:true,  handwriting_score:78, good:'バランス良し', improve:'はねを意識して'},
+        {no:3, question:'(デモ) 読みを漢字に', correct_kanji:'憲法', student_answer:'検法',
+         is_correct:false, handwriting_score:70, good:'大きく書けている', improve:'左右の部首を確認'}
+      ]
+    };
+  }
+
+  $('loadingOverlay').classList.remove('active');
+  showResult(result);
+}
+
+// ============================================
+// 結果表示
+// ============================================
+function showResult(r){
+  const total   = Math.max(0, Number(r.total_questions) || 0);
+  const correct = Math.max(0, Math.min(total, Number(r.correct_count) || 0));
+  const overall = Math.max(0, Math.min(100, Math.round(Number(r.overall_score) || 0)));
+
+  $('scoreNumber').textContent  = overall;
+  const fill = Math.round(overall / 20);
+  $('scoreStars').textContent   = '★'.repeat(fill) + '☆'.repeat(5 - fill);
+  $('correctCount').textContent = correct;
+  $('totalCount').textContent   = total;
+  $('overallComment').textContent = r.overall_comment || '-';
+
+  // 問題ごとのリスト
+  const list = $('itemList');
+  list.innerHTML = '';
+  const items = Array.isArray(r.items) ? r.items : [];
+
+  if (items.length === 0) {
+    list.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:10px">問題を読み取れませんでした。明るい場所でもう一度撮影してみてください。</div>';
+  }
+
+  items.forEach(it => {
+    const card = document.createElement('div');
+    card.className = 'item-card ' + (it.is_correct ? 'correct' : 'wrong');
+    const hw = Math.max(0, Math.min(100, Math.round(Number(it.handwriting_score) || 0)));
+    card.innerHTML = `
+      <div class="item-head">
+        <div class="item-num">${escapeHtml(String(it.no ?? '?'))}</div>
+        <div>問${escapeHtml(String(it.no ?? ''))}</div>
+        <div class="item-mark">${it.is_correct ? '⭕' : '❌'}</div>
+      </div>
+      ${it.question ? `<div class="item-q">${escapeHtml(it.question)}</div>` : ''}
+      <div class="item-kanji-row">
+        <span>正解</span>
+        <span class="big">${escapeHtml(it.correct_kanji || '-')}</span>
+        <span style="margin-left:8px">あなた</span>
+        <span class="big ${it.is_correct ? '' : 'diff'}">${escapeHtml(it.student_answer || '-')}</span>
+      </div>
+      <div class="item-handwriting">
+        <span>書き方</span>
+        <div class="handwriting-bar"><div style="width:${hw}%"></div></div>
+        <b>${hw}</b>
+      </div>
+      <div class="item-feedback">
+        <b>◎</b> ${escapeHtml(it.good || '-')}
+        <b>△</b> ${escapeHtml(it.improve || '-')}
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+  // 獲得ポイント：正解 10pt + 書き方/10pt、不正解は書き方/20pt
+  let gain = 0;
+  items.forEach(it => {
+    const hw = Math.max(0, Math.min(100, Number(it.handwriting_score) || 0));
+    if (it.is_correct) gain += 10 + Math.floor(hw / 10);
+    else               gain += Math.floor(hw / 20);
+  });
+  // 全問正解ボーナス
+  if (total > 0 && correct === total) gain += 20;
+
+  if (gain > 0) {
+    points += gain;
+    localStorage.setItem('km_points', String(points));
+    updatePointsDisplay();
+    $('gainedPoints').textContent = `+${gain} pt ゲット！`;
+    $('gainedPoints').style.display = 'inline-block';
+  } else {
+    $('gainedPoints').style.display = 'none';
+  }
+
+  if (overall >= 80 || (total > 0 && correct === total)) launchConfetti();
+
+  $('resultOverlay').classList.add('active');
+}
+
+function closeResult(){
+  $('resultOverlay').classList.remove('active');
+  retake();
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
+// ============================================
+// ポイント表示
+// ============================================
+function updatePointsDisplay(){
+  $('pointsDisplay').textContent = points;
+  $('currentPt').textContent     = points;
+}
+
+// ============================================
+// ご褒美
+// ============================================
+function openRewards(){
+  const list = $('rewardList');
+  list.innerHTML = '';
+  REWARDS.forEach((rw, idx) => {
+    const can = points >= rw.c;
+    const div = document.createElement('div');
+    div.className = 'reward-item' + (can ? ' can' : '');
+    div.innerHTML = `
+      <div class="reward-emoji">${rw.e}</div>
+      <div class="reward-body">
+        <div class="reward-name">${escapeHtml(rw.n)}</div>
+        <div class="reward-cost">${rw.c} pt</div>
+      </div>
+      <button class="reward-redeem" ${can ? '' : 'disabled'} data-idx="${idx}">
+        ${can ? '交換' : 'あと ' + (rw.c - points) + ' pt'}
+      </button>
+    `;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('.reward-redeem:not(:disabled)').forEach(btn => {
+    btn.addEventListener('click', () => redeem(Number(btn.dataset.idx)));
+  });
+  $('rewardsOverlay').classList.add('active');
+}
+
+function closeRewards(){
+  $('rewardsOverlay').classList.remove('active');
+}
+
+function redeem(i){
+  const rw = REWARDS[i];
+  if (!rw || points < rw.c) return;
+  if (!confirm(`「${rw.n}」と交換しますか？\n${rw.c} pt つかいます。`)) return;
+  points -= rw.c;
+  localStorage.setItem('km_points', String(points));
+  updatePointsDisplay();
+  alert(`🎉 交換完了！\nおうちの人に「${rw.n}」をお願いしよう！`);
+  openRewards();
+}
+
+// ============================================
+// 紙吹雪エフェクト
+// ============================================
+function launchConfetti(){
+  const colors = ['#ff4f7e','#ff9500','#ffd93d','#85d6ff','#b388ff','#2fa84a'];
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.top  = '-20px';
+    c.style.background = colors[i % colors.length];
+    c.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    c.style.animationDelay = (Math.random() * 0.6) + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 3200);
+  }
+}
+</script>
+</body>
+</html>
