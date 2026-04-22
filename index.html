@@ -643,44 +643,21 @@ async function scoreTest(){
 
   let result;
   try {
-    const body = {
-      model: 'claude-sonnet-4-6',          // テスト全体を読むのでSonnetのほうが賢い
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/jpeg',
-              data: capturedImageData
-            }
-          },
-          {
-            type: 'text',
-            text: 'このテスト用紙を採点してください。必ず指定のJSON形式のみで返答してください。'
-          }
-        ]
-      }]
-    };
-
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // APIキーはサーバー側（/api/score）に置いているので、
+    // ブラウザからは画像データとシステムプロンプトだけを送る
+    const res = await fetch('/api/score', {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': 'sk-ant-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',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify(body)
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        imageData: capturedImageData,
+        systemPrompt: systemPrompt
+      })
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      console.error('API error:', res.status, errText);
-      throw new Error('API error ' + res.status);
+      const errJson = await res.json().catch(() => ({}));
+      console.error('API error:', res.status, errJson);
+      throw new Error(errJson.error || ('サーバーエラー ' + res.status));
     }
 
     const data = await res.json();
@@ -690,22 +667,22 @@ async function scoreTest(){
     result = JSON.parse(m[0]);
 
   } catch (e) {
-  console.error('採点に失敗しました：', e);
-  $('loadingOverlay').classList.remove('active');
-  alert(
-    '採点できませんでした。\n\n' +
-    '下のどれかが原因かもしれません：\n' +
-    '・インターネットに接続されていない\n' +
-    '・APIキーが正しくない／残高切れ\n' +
-    '・写真がぶれている、暗い、斜めすぎる\n\n' +
-    '「撮り直し」からもう一度撮影してください。\n\n' +
-    '[技術的なエラー] ' + (e.message || e)
-  );
-  return;  // ← 重要：これでデモ結果画面に進まず、撮影画面に戻る
-}
+    console.error('採点に失敗しました：', e);
+    $('loadingOverlay').classList.remove('active');
+    alert(
+      '採点できませんでした。\n\n' +
+      '下のどれかが原因かもしれません：\n' +
+      '・インターネットに接続されていない\n' +
+      '・APIキーが正しくない／残高切れ\n' +
+      '・写真がぶれている、暗い、斜めすぎる\n\n' +
+      '「撮り直し」からもう一度撮影してください。\n\n' +
+      '[技術的なエラー] ' + (e.message || e)
+    );
+    return;
+  }
 
-$('loadingOverlay').classList.remove('active');
-showResult(result);
+  $('loadingOverlay').classList.remove('active');
+  showResult(result);
 }
 
 // ============================================
