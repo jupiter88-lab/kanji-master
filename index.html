@@ -690,26 +690,22 @@ async function scoreTest(){
     result = JSON.parse(m[0]);
 
   } catch (e) {
-    // APIキー未設定／エラー時はデモデータ
-    console.warn('採点失敗のためデモデータを表示します：', e);
-    result = {
-      total_questions: 3,
-      correct_count:   2,
-      overall_score:   72,
-      overall_comment: '(デモ) よくがんばりました！次もこの調子で！',
-      items: [
-        {no:1, question:'(デモ) 読みを漢字に', correct_kanji:'議論', student_answer:'議論',
-         is_correct:true,  handwriting_score:85, good:'とめがきれい', improve:'横画の長さをそろえよう'},
-        {no:2, question:'(デモ) 読みを漢字に', correct_kanji:'権利', student_answer:'権利',
-         is_correct:true,  handwriting_score:78, good:'バランス良し', improve:'はねを意識して'},
-        {no:3, question:'(デモ) 読みを漢字に', correct_kanji:'憲法', student_answer:'検法',
-         is_correct:false, handwriting_score:70, good:'大きく書けている', improve:'左右の部首を確認'}
-      ]
-    };
-  }
-
+  console.error('採点に失敗しました：', e);
   $('loadingOverlay').classList.remove('active');
-  showResult(result);
+  alert(
+    '採点できませんでした。\n\n' +
+    '下のどれかが原因かもしれません：\n' +
+    '・インターネットに接続されていない\n' +
+    '・APIキーが正しくない／残高切れ\n' +
+    '・写真がぶれている、暗い、斜めすぎる\n\n' +
+    '「撮り直し」からもう一度撮影してください。\n\n' +
+    '[技術的なエラー] ' + (e.message || e)
+  );
+  return;  // ← 重要：これでデモ結果画面に進まず、撮影画面に戻る
+}
+
+$('loadingOverlay').classList.remove('active');
+showResult(result);
 }
 
 // ============================================
