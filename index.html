@@ -74,12 +74,12 @@
   .camera-wrap {
     flex: 1;
     position: relative;
-    margin: 0 16px;
+    margin: 0 6px;
     background: #111;
-    border-radius: 22px;
+    border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-    border: 3px solid white;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.6);
     min-height: 220px;
   }
   #video, #snapshot {
@@ -88,7 +88,8 @@
     width: 100%;
     height: 100%;
   }
-  #video { object-fit: cover; }
+  /* contain にすることで「画面に映っている範囲＝実際に撮影される範囲」に一致 */
+  #video    { object-fit: contain; background: #111; }
   #snapshot { object-fit: contain; background: white; display: none; }
   .paper-frame {
     position: absolute;
@@ -120,6 +121,26 @@
     gap: 20px;
     padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
     flex-shrink: 0;
+  }
+  /* 撮影前ボタンはカメラ領域に重ねて浮かべる */
+  .controls-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    z-index: 5;
+    padding: 0;
+    pointer-events: none;   /* 余白部分はカメラクリックを通す */
+  }
+  .controls-overlay > * {
+    pointer-events: auto;   /* ボタン自体だけクリック有効 */
+  }
+  /* カメラに重ねるので視認性のためボタン周りにほんのり影を強める */
+  .controls-overlay .shutter {
+    box-shadow: 0 8px 22px rgba(0,0,0,0.45), 0 0 0 4px rgba(255,255,255,0.25);
+  }
+  .controls-overlay .side-btn {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
   }
   .shutter {
     width: 72px;
@@ -463,13 +484,13 @@
   <img id="snapshot" alt="撮影したテスト">
   <canvas id="canvas" style="display:none"></canvas>
   <div class="paper-frame" id="frame"></div>
-</div>
 
-<!-- 撮影前のコントロール -->
-<div class="controls-row" id="controls">
-  <button class="side-btn" onclick="switchCamera()" aria-label="カメラ切替">⇋</button>
-  <button class="shutter" onclick="capture()" aria-label="撮影"></button>
-  <div style="width:48px"></div>
+  <!-- 撮影前のコントロール：カメラ下部中央にオーバーレイ -->
+  <div class="controls-row controls-overlay" id="controls">
+    <button class="side-btn" onclick="switchCamera()" aria-label="カメラ切替">⇋</button>
+    <button class="shutter" onclick="capture()" aria-label="撮影"></button>
+    <div style="width:48px"></div>
+  </div>
 </div>
 
 <!-- 撮影後のコントロール -->
