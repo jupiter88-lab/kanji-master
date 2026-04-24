@@ -400,6 +400,45 @@
   @keyframes fall {
     to { transform: translateY(110vh) rotate(720deg); opacity: 0; }
   }
+
+  /* ===== 横向き（ランドスケープ）対応 =====
+     高さが足りない端末（ほぼスマホ横持ち）では、
+     ヘッダーとコントロールを小さくしてカメラ領域を最大化 */
+  @media (orientation: landscape) and (max-height: 560px) {
+    header { padding: 6px 14px; }
+    header h1 { font-size: 15px; letter-spacing: 2px; text-shadow: 1px 1px 0 #fff; }
+    .points-badge { padding: 3px 10px; font-size: 11px; border-width: 1px; }
+
+    /* ガイドは非表示にして縦スペースを稼ぐ */
+    .guide { display: none; }
+
+    .camera-wrap {
+      margin: 4px 10px;
+      min-height: 140px;
+      border-width: 2px;
+      border-radius: 14px;
+    }
+
+    /* 横向き時は枠を横長比率寄りに（A4横持ちが収まるよう少しスリムに） */
+    .paper-frame { inset: 6% 9%; }
+    .paper-frame::before {
+      content: "テスト用紙をこの枠に";
+      font-size: 10px;
+      top: 6px;
+      padding: 2px 8px;
+    }
+
+    /* ボタン類も小さく */
+    .controls-row {
+      padding: 6px 14px calc(6px + env(safe-area-inset-bottom));
+      gap: 14px;
+    }
+    .shutter { width: 56px; height: 56px; border-width: 4px; }
+    .shutter::after { width: 40px; height: 40px; margin: 3px auto; }
+    .side-btn { width: 40px; height: 40px; font-size: 18px; }
+    .score-btn { padding: 10px 22px; font-size: 15px; letter-spacing: 1px; }
+    .retake-btn { padding: 8px 18px; font-size: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -414,7 +453,8 @@
 <!-- 使い方ガイド -->
 <div class="guide" id="guide">
   <b>📄 テスト用紙を1枚まるごと撮影してね</b><br>
-  <span style="font-size:11px;color:#666">明るい場所で、紙全体が入るようにまっすぐ撮ろう</span>
+  <span style="font-size:11px;color:#666">明るい場所で、紙全体が入るようにまっすぐ撮ろう<br>
+  横長の用紙なら、スマホを<b>横向き</b>に回して撮ってOK！</span>
 </div>
 
 <!-- カメラエリア -->
