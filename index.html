@@ -56,6 +56,103 @@
   }
   .points-badge:active { transform: translateY(-50%) scale(0.94); }
 
+  .hist-badge {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.85);
+    border: 2px solid white;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    padding: 0;
+  }
+  .hist-badge:active { transform: translateY(-50%) scale(0.94); }
+
+  /* 採点済みの画像（結果ヘッダ） */
+  .result-image {
+    margin: 0 0 10px;
+    text-align: center;
+  }
+  .result-image img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    cursor: zoom-in;
+  }
+
+  /* 履歴一覧 */
+  .history-empty {
+    color: #888;
+    font-size: 13px;
+    text-align: center;
+    padding: 24px 8px;
+  }
+  .history-list { text-align: left; margin-top: 12px; }
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border: 2px solid #eee;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    background: white;
+  }
+  .history-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 10px;
+    flex-shrink: 0;
+    background: #f5f5f5;
+  }
+  .history-body { flex: 1; min-width: 0; }
+  .history-date { font-size: 12px; color: #888; }
+  .history-stats {
+    font-size: 13px;
+    font-weight: bold;
+    color: #3d2a4e;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .history-stats .score { color: #ff4f7e; }
+  .history-actions { display: flex; flex-direction: column; gap: 4px; }
+  .history-view, .history-del {
+    border: none;
+    border-radius: 12px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .history-view {
+    background: linear-gradient(135deg,#ff4f7e,#ff9500);
+    color: white;
+  }
+  .history-del {
+    background: #f5f5f5;
+    color: #888;
+  }
+  .history-clear {
+    margin-top: 12px;
+    background: white;
+    color: #888;
+    border: 2px solid #ddd;
+    padding: 8px 14px;
+    border-radius: 18px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
   /* ===== ガイドカード ===== */
   .guide {
     margin: 12px 16px 8px;
@@ -466,6 +563,7 @@
 
 <header>
   <h1>漢字マスター AI</h1>
+  <button class="hist-badge" onclick="openHistory()" aria-label="採点履歴">📚</button>
   <button class="points-badge" onclick="openRewards()">
     🏆 <span id="pointsDisplay">0</span> pt
   </button>
@@ -516,6 +614,10 @@
   <div class="modal">
     <button class="close-x" onclick="closeResult()">×</button>
 
+    <div class="result-image" id="resultImage" style="display:none">
+      <img id="resultImg" alt="採点した答案">
+    </div>
+
     <div class="result-summary">
       <div class="score-label">総合スコア</div>
       <div class="score-number" id="scoreNumber">-</div>
@@ -537,6 +639,21 @@
 
     <button class="score-btn" style="margin-top:10px;width:100%" onclick="closeResult()">
       つぎのテストへ！
+    </button>
+  </div>
+</div>
+
+<!-- 採点履歴 -->
+<div class="overlay" id="historyOverlay">
+  <div class="modal">
+    <button class="close-x" onclick="closeHistory()">×</button>
+    <div style="font-size:22px;font-weight:bold;color:#ff4f7e">📚 採点りれき</div>
+    <div style="color:#888;font-size:12px;margin-top:4px">
+      これまでに採点した答案をいつでも見直せます
+    </div>
+    <div class="history-list" id="historyList"></div>
+    <button class="history-clear" id="historyClearBtn" onclick="clearHistory()" style="display:none">
+      すべて削除
     </button>
   </div>
 </div>
@@ -615,7 +732,12 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
 - どうしても判読できない場合は student_answer を "?"、is_correct を false、improve に「もう少し濃く・大きく書くと読み取りやすいよ」と入れてください。
 
 【採点の手順（順序厳守）】
-1. テスト内のすべての設問を認識する（問題番号、問題文、解答欄）。問題番号は左上→右下の順で並べる。
+1. テスト内のすべての設問を認識する（問題番号、問題文、解答欄）。並べる順序は **縦書きの読み順** に従ってください：
+   - **右上の問題を最初** に読み、その列を上から下へ進む。
+   - 列の一番下まで来たら、**左隣の列の上**へ移動して再び上から下へ。
+   - これを左端の列まで繰り返す。横方向ではなく、必ず右→左の列順で進めること。
+   - 紙が傾いて写っていても向きを補正してから、この縦書きの順序で番号を振ってください。
+   - 印刷された問題番号がある場合はそれを優先し、なければ上記の縦書き順で no を 1 から振ること。
 2. **解答欄を見る前に**、問題文だけから各設問の正解（correct_kanji）を決定する。
 3. 解答欄に手書きされた文字を、上の【手書きの読み取りの心得】に従って、正解に引きずられず素直に読み取り、student_answer に入れる。
 4. correct_kanji と student_answer を比較して正誤を判定する。文字・送り仮名も含めて完全一致なら正解、違えば不正解。1画でも欠けていたり余分な画があれば不正解扱い。ただし「とめ・はね・はらい」のわずかなブレは正解扱い。
@@ -653,8 +775,96 @@ let usingFrontCamera = false;
 let useWideAngle = false;
 let capturedImageData = null;
 let points = Number(localStorage.getItem('km_points') || 0);
+let viewingHistory = false;     // 履歴から開いた結果画面か？
 
 const $ = id => document.getElementById(id);
+
+// ============================================
+// 採点履歴：IndexedDB
+// ============================================
+const HIST_DB   = 'km_history';
+const HIST_STORE = 'records';
+let _dbPromise = null;
+
+function getHistDB(){
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error('IndexedDB 非対応のブラウザです')); return; }
+    const req = indexedDB.open(HIST_DB, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(HIST_STORE)) {
+        db.createObjectStore(HIST_STORE, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+  return _dbPromise;
+}
+
+async function saveHistoryRecord(record){
+  try {
+    const db = await getHistDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(HIST_STORE, 'readwrite');
+      const req = tx.objectStore(HIST_STORE).add(record);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror   = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('履歴の保存に失敗：', e);
+  }
+}
+
+async function listHistoryRecords(){
+  try {
+    const db = await getHistDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(HIST_STORE, 'readonly');
+      const req = tx.objectStore(HIST_STORE).getAll();
+      req.onsuccess = () => {
+        const arr = req.result || [];
+        arr.sort((a, b) => (b.id || 0) - (a.id || 0));
+        resolve(arr);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('履歴の取得に失敗：', e);
+    return [];
+  }
+}
+
+async function getHistoryRecord(id){
+  const db = await getHistDB();
+  return await new Promise((resolve, reject) => {
+    const tx = db.transaction(HIST_STORE, 'readonly');
+    const req = tx.objectStore(HIST_STORE).get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function deleteHistoryRecord(id){
+  const db = await getHistDB();
+  return await new Promise((resolve, reject) => {
+    const tx = db.transaction(HIST_STORE, 'readwrite');
+    const req = tx.objectStore(HIST_STORE).delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function clearAllHistory(){
+  const db = await getHistDB();
+  return await new Promise((resolve, reject) => {
+    const tx = db.transaction(HIST_STORE, 'readwrite');
+    const req = tx.objectStore(HIST_STORE).clear();
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
 
 // ============================================
 // 起動
@@ -871,7 +1081,19 @@ async function scoreTest(){
   }
 
   $('loadingOverlay').classList.remove('active');
-  showResult(result);
+
+  // 履歴に保存（snapshot 用 dataURL があるならそれを採用）
+  const savedImageDataUrl = $('snapshot').src && $('snapshot').src.startsWith('data:')
+    ? $('snapshot').src
+    : ('data:image/jpeg;base64,' + capturedImageData);
+  saveHistoryRecord({
+    date: new Date().toISOString(),
+    imageData: savedImageDataUrl,
+    result: result
+  });
+
+  viewingHistory = false;
+  showResult(result, savedImageDataUrl);
 }
 
 // ============================================
@@ -916,7 +1138,15 @@ function repairTruncatedJson(s){
 // ============================================
 // 結果表示
 // ============================================
-function showResult(r){
+function showResult(r, imageDataUrl){
+  // 採点した画像（あれば）を結果上部に表示
+  if (imageDataUrl) {
+    $('resultImg').src = imageDataUrl;
+    $('resultImage').style.display = '';
+  } else {
+    $('resultImage').style.display = 'none';
+  }
+
   const items = Array.isArray(r.items) ? r.items : [];
   const isBeauty = it => (it.mode || 'judge') === 'beauty';
   const judgeItems  = items.filter(it => !isBeauty(it));
@@ -1035,7 +1265,8 @@ function showResult(r){
   if (total > 0 && correct === total) gain += 20;
   if (allBeauty && overall >= 80) gain += 20;
 
-  if (gain > 0) {
+  if (!viewingHistory && gain > 0) {
+    // 採点直後のみポイントを加算（履歴を見直すときは加算しない）
     points += gain;
     localStorage.setItem('km_points', String(points));
     updatePointsDisplay();
@@ -1045,14 +1276,19 @@ function showResult(r){
     $('gainedPoints').style.display = 'none';
   }
 
-  if (overall >= 80 || (total > 0 && correct === total)) launchConfetti();
+  if (!viewingHistory && (overall >= 80 || (total > 0 && correct === total))) launchConfetti();
 
   $('resultOverlay').classList.add('active');
 }
 
 function closeResult(){
   $('resultOverlay').classList.remove('active');
-  retake();
+  if (viewingHistory) {
+    viewingHistory = false;
+    openHistory();   // 履歴一覧に戻る
+  } else {
+    retake();
+  }
 }
 
 function escapeHtml(s){
@@ -1067,6 +1303,96 @@ function escapeHtml(s){
 function updatePointsDisplay(){
   $('pointsDisplay').textContent = points;
   $('currentPt').textContent     = points;
+}
+
+// ============================================
+// 採点履歴：表示・閲覧・削除
+// ============================================
+async function openHistory(){
+  const records = await listHistoryRecords();
+  const list = $('historyList');
+  list.innerHTML = '';
+
+  if (!records.length) {
+    list.innerHTML = '<div class="history-empty">まだ採点履歴はありません。<br>用紙を撮って採点すると、ここに残ります。</div>';
+    $('historyClearBtn').style.display = 'none';
+  } else {
+    $('historyClearBtn').style.display = '';
+    records.forEach(rec => {
+      const r = rec.result || {};
+      const items = Array.isArray(r.items) ? r.items : [];
+      const isBeauty = it => (it.mode || 'judge') === 'beauty';
+      const judgeItems  = items.filter(it => !isBeauty(it));
+      const beautyItems = items.filter(isBeauty);
+      const allBeauty   = items.length > 0 && judgeItems.length === 0;
+
+      const total   = Math.max(0, Number(r.total_questions) || judgeItems.length);
+      const correct = Math.max(0, Math.min(total, Number(r.correct_count) || 0));
+      const overall = Math.max(0, Math.min(100, Math.round(Number(r.overall_score) || 0)));
+
+      let dateStr = '';
+      try {
+        dateStr = new Date(rec.date).toLocaleString('ja-JP', {
+          year: 'numeric', month: 'numeric', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+      } catch (e) { dateStr = String(rec.date || ''); }
+
+      const statsLeft = allBeauty
+        ? `✏️ ${beautyItems.length}字 きれいさ評価`
+        : `${correct} / ${total} 問正解`;
+
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `
+        <img class="history-thumb" src="${escapeHtml(rec.imageData || '')}" alt="">
+        <div class="history-body">
+          <div class="history-date">${escapeHtml(dateStr)}</div>
+          <div class="history-stats">
+            ${escapeHtml(statsLeft)} ・ <span class="score">${overall}点</span>
+          </div>
+        </div>
+        <div class="history-actions">
+          <button class="history-view" data-id="${rec.id}">見る</button>
+          <button class="history-del"  data-id="${rec.id}">🗑</button>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+
+    list.querySelectorAll('.history-view').forEach(b => {
+      b.addEventListener('click', () => viewHistoryRecord(Number(b.dataset.id)));
+    });
+    list.querySelectorAll('.history-del').forEach(b => {
+      b.addEventListener('click', () => removeHistoryRecord(Number(b.dataset.id)));
+    });
+  }
+
+  $('historyOverlay').classList.add('active');
+}
+
+function closeHistory(){
+  $('historyOverlay').classList.remove('active');
+}
+
+async function viewHistoryRecord(id){
+  const rec = await getHistoryRecord(id);
+  if (!rec) { alert('履歴が見つかりませんでした。'); return; }
+  $('historyOverlay').classList.remove('active');
+  viewingHistory = true;
+  showResult(rec.result || {}, rec.imageData || '');
+}
+
+async function removeHistoryRecord(id){
+  if (!confirm('この履歴を削除しますか？')) return;
+  await deleteHistoryRecord(id);
+  await openHistory();
+}
+
+async function clearHistory(){
+  if (!confirm('採点履歴をすべて削除します。よろしいですか？')) return;
+  await clearAllHistory();
+  await openHistory();
 }
 
 // ============================================
