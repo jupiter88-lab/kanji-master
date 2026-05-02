@@ -520,8 +520,11 @@
       <div class="score-label">総合スコア</div>
       <div class="score-number" id="scoreNumber">-</div>
       <div class="stars" id="scoreStars">☆☆☆☆☆</div>
-      <div class="correct-ratio">
+      <div class="correct-ratio" id="correctRatio">
         <span class="num" id="correctCount">0</span> / <span id="totalCount">0</span> 問 正解
+      </div>
+      <div class="correct-ratio" id="beautyRatio" style="display:none">
+        ✏️ 字のきれいさ平均 <span class="num" id="beautyAvg">0</span> 点
       </div>
       <div class="overall-comment" id="overallComment">-</div>
       <div class="gained-points" id="gainedPoints" style="display:none">+0 pt</div>
@@ -581,6 +584,19 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
   ③ ①と②を突き合わせて正誤を判定する。
 - 問題文から正解が一意に決められないとき（例：ふりがなが読めない、問題文が写っていない等）は、correct_kanji を "?" とし、is_correct を false、improve に「問題文が読み取れなかったよ」と入れてください。この場合も、手書きに合わせて正解を作ってはいけません。
 
+【問題文がない場合（きれいさ評価モード）】
+- 解答欄の周囲に問題文（出題形式・ふりがな・例文・空欄補充の文など）が**一切印刷されていない**場合（漢字練習帳、書写プリント、ただ漢字や言葉が並んでいるだけの紙、なぞり書き等）は、その項目を **きれいさ評価モード** として扱ってください。
+- きれいさ評価モードでは、各項目に "mode": "beauty" を入れてください。通常の正誤判定モードでは "mode": "judge" を入れてください（省略時は judge とみなします）。
+- 同じ紙の中に問題文付きの設問と問題文なしの練習が混在しているときは、**項目ごと**にモードを使い分けてください。
+- きれいさ評価モードでは正誤の判定は行いません：
+  - correct_kanji と student_answer の両方に「実際に書かれた文字」を入れてください（書かれた文字をそのまま素直に読み取ること。正解を勝手に推測しないこと）。
+  - is_correct は常に true にしてください（× で減点扱いにしないため）。
+  - 評価の中心は handwriting_score（字形バランス、とめ・はね・はらい、線の長短、マスに収まっているか）です。**0〜100 で厳しすぎず、ただし通常モードよりはきれいさ重視で**評価してください。
+  - good / improve は、字形・線・バランス・とめはねはらい等の書き方の良し悪しに焦点を当て、漢字の意味や送り仮名には触れないでください。
+- total_questions と correct_count は **judge モードの項目だけ** カウントしてください（beauty モードの項目は分母にも分子にも入れない）。全項目が beauty モードのときは total_questions=0、correct_count=0 で構いません。
+- overall_score は、judge モードの項目の正解率と beauty モードの項目の handwriting_score 平均を組み合わせて 0〜100 で出してください。全項目が beauty モードのときは handwriting_score の平均をそのまま overall_score にしてください。
+- overall_comment も、全項目が beauty モードなら「字がきれいに書けているか」に焦点を当てたコメントにしてください。
+
 【問題文の読み方】
 - 典型的な出題形式：
   ・「次の──線のひらがなを漢字で書きなさい」→ ふりがな（ひらがな）＋文脈から漢字を決める。
@@ -617,10 +633,11 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
   "items": [
     {
       "no": 問題番号,
-      "question": "問題文の要約（20字以内、読み取れなければ空文字）",
-      "correct_kanji": "正解の文字列",
+      "mode": "judge" または "beauty"（省略時は judge）,
+      "question": "問題文の要約（20字以内、読み取れなければ空文字。beauty モードは空文字でよい）",
+      "correct_kanji": "正解の文字列（beauty モードでは書かれた文字をそのまま）",
       "student_answer": "解答欄に書かれた文字列（読み取った結果）",
-      "is_correct": true または false,
+      "is_correct": true または false（beauty モードでは常に true）,
       "handwriting_score": 書き方の点数 0〜100の整数,
       "good": "書き方のよい点（20字以内）",
       "improve": "書き方の改善点（20字以内）"
@@ -833,21 +850,44 @@ async function scoreTest(){
 // 結果表示
 // ============================================
 function showResult(r){
-  const total   = Math.max(0, Number(r.total_questions) || 0);
-  const correct = Math.max(0, Math.min(total, Number(r.correct_count) || 0));
-  const overall = Math.max(0, Math.min(100, Math.round(Number(r.overall_score) || 0)));
+  const items = Array.isArray(r.items) ? r.items : [];
+  const isBeauty = it => (it.mode || 'judge') === 'beauty';
+  const judgeItems  = items.filter(it => !isBeauty(it));
+  const beautyItems = items.filter(isBeauty);
+  const allBeauty   = items.length > 0 && judgeItems.length === 0;
+
+  const total   = Math.max(0, Number(r.total_questions) || judgeItems.length);
+  const correct = Math.max(0, Math.min(total, Number(r.correct_count) || judgeItems.filter(it => it.is_correct).length));
+  let overall   = Math.max(0, Math.min(100, Math.round(Number(r.overall_score) || 0)));
+  // 全項目が beauty のときは handwriting_score の平均を overall に使う（AI が値を入れ忘れた場合のフォールバック）
+  if (allBeauty && (!r.overall_score || overall === 0)) {
+    const avg = beautyItems.reduce((s, it) => s + (Number(it.handwriting_score) || 0), 0) / Math.max(1, beautyItems.length);
+    overall = Math.round(avg);
+  }
 
   $('scoreNumber').textContent  = overall;
   const fill = Math.round(overall / 20);
   $('scoreStars').textContent   = '★'.repeat(fill) + '☆'.repeat(5 - fill);
-  $('correctCount').textContent = correct;
-  $('totalCount').textContent   = total;
   $('overallComment').textContent = r.overall_comment || '-';
+
+  // 正解数表示 / きれいさ平均表示の切り替え
+  if (allBeauty) {
+    const avg = Math.round(
+      beautyItems.reduce((s, it) => s + (Number(it.handwriting_score) || 0), 0) / Math.max(1, beautyItems.length)
+    );
+    $('beautyAvg').textContent = avg;
+    $('correctRatio').style.display = 'none';
+    $('beautyRatio').style.display  = '';
+  } else {
+    $('correctCount').textContent = correct;
+    $('totalCount').textContent   = total;
+    $('correctRatio').style.display = '';
+    $('beautyRatio').style.display  = 'none';
+  }
 
   // 問題ごとのリスト
   const list = $('itemList');
   list.innerHTML = '';
-  const items = Array.isArray(r.items) ? r.items : [];
 
   if (items.length === 0) {
     list.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:10px">問題を読み取れませんでした。明るい場所でもう一度撮影してみてください。</div>';
@@ -855,43 +895,78 @@ function showResult(r){
 
   items.forEach(it => {
     const card = document.createElement('div');
-    card.className = 'item-card ' + (it.is_correct ? 'correct' : 'wrong');
     const hw = Math.max(0, Math.min(100, Math.round(Number(it.handwriting_score) || 0)));
-    card.innerHTML = `
-      <div class="item-head">
-        <div class="item-num">${escapeHtml(String(it.no ?? '?'))}</div>
-        <div>問${escapeHtml(String(it.no ?? ''))}</div>
-        <div class="item-mark">${it.is_correct ? '⭕' : '❌'}</div>
-      </div>
-      ${it.question ? `<div class="item-q">${escapeHtml(it.question)}</div>` : ''}
-      <div class="item-kanji-row">
-        <span>正解</span>
-        <span class="big">${escapeHtml(it.correct_kanji || '-')}</span>
-        <span style="margin-left:8px">あなた</span>
-        <span class="big ${it.is_correct ? '' : 'diff'}">${escapeHtml(it.student_answer || '-')}</span>
-      </div>
-      <div class="item-handwriting">
-        <span>書き方</span>
-        <div class="handwriting-bar"><div style="width:${hw}%"></div></div>
-        <b>${hw}</b>
-      </div>
-      <div class="item-feedback">
-        <b>◎</b> ${escapeHtml(it.good || '-')}
-        <b>△</b> ${escapeHtml(it.improve || '-')}
-      </div>
-    `;
+    if (isBeauty(it)) {
+      // きれいさ評価モード：正誤は出さず、書いた字とその書き方を見せる
+      card.className = 'item-card correct';
+      card.innerHTML = `
+        <div class="item-head">
+          <div class="item-num">${escapeHtml(String(it.no ?? '?'))}</div>
+          <div>${escapeHtml(String(it.no ?? ''))}字目</div>
+          <div class="item-mark">✏️</div>
+        </div>
+        <div class="item-kanji-row">
+          <span>書いた字</span>
+          <span class="big">${escapeHtml(it.student_answer || it.correct_kanji || '-')}</span>
+        </div>
+        <div class="item-handwriting">
+          <span>きれいさ</span>
+          <div class="handwriting-bar"><div style="width:${hw}%"></div></div>
+          <b>${hw}</b>
+        </div>
+        <div class="item-feedback">
+          <b>◎</b> ${escapeHtml(it.good || '-')}
+          <b>△</b> ${escapeHtml(it.improve || '-')}
+        </div>
+      `;
+    } else {
+      // 通常の正誤判定モード
+      card.className = 'item-card ' + (it.is_correct ? 'correct' : 'wrong');
+      card.innerHTML = `
+        <div class="item-head">
+          <div class="item-num">${escapeHtml(String(it.no ?? '?'))}</div>
+          <div>問${escapeHtml(String(it.no ?? ''))}</div>
+          <div class="item-mark">${it.is_correct ? '⭕' : '❌'}</div>
+        </div>
+        ${it.question ? `<div class="item-q">${escapeHtml(it.question)}</div>` : ''}
+        <div class="item-kanji-row">
+          <span>正解</span>
+          <span class="big">${escapeHtml(it.correct_kanji || '-')}</span>
+          <span style="margin-left:8px">あなた</span>
+          <span class="big ${it.is_correct ? '' : 'diff'}">${escapeHtml(it.student_answer || '-')}</span>
+        </div>
+        <div class="item-handwriting">
+          <span>書き方</span>
+          <div class="handwriting-bar"><div style="width:${hw}%"></div></div>
+          <b>${hw}</b>
+        </div>
+        <div class="item-feedback">
+          <b>◎</b> ${escapeHtml(it.good || '-')}
+          <b>△</b> ${escapeHtml(it.improve || '-')}
+        </div>
+      `;
+    }
     list.appendChild(card);
   });
 
-  // 獲得ポイント：正解 10pt + 書き方/10pt、不正解は書き方/20pt
+  // 獲得ポイント
+  // - judge 正解：10pt + 書き方/10pt
+  // - judge 不正解：書き方/20pt
+  // - beauty：きれいさ/8pt（きれいに書けたら手厚く加算）
   let gain = 0;
   items.forEach(it => {
     const hw = Math.max(0, Math.min(100, Number(it.handwriting_score) || 0));
-    if (it.is_correct) gain += 10 + Math.floor(hw / 10);
-    else               gain += Math.floor(hw / 20);
+    if (isBeauty(it)) {
+      gain += Math.floor(hw / 8);
+    } else if (it.is_correct) {
+      gain += 10 + Math.floor(hw / 10);
+    } else {
+      gain += Math.floor(hw / 20);
+    }
   });
-  // 全問正解ボーナス
+  // ボーナス：全 judge 正解、または 全 beauty の平均が 80 以上
   if (total > 0 && correct === total) gain += 20;
+  if (allBeauty && overall >= 80) gain += 20;
 
   if (gain > 0) {
     points += gain;
