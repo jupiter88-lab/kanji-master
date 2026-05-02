@@ -824,8 +824,7 @@ async function scoreTest(){
     const data = await res.json();
     const rawText = data.content?.[0]?.text || '';
     const stopReason = data.stop_reason || '';
-    // サーバ側で assistant を "{" で prefill しているので、先頭に "{" を補う
-    let text = '{' + rawText;
+    let text = rawText;
 
     // 途中切れ（max_tokens 到達）は閉じ括弧が無いので、その時点までで打ち切って復旧を試みる
     if (stopReason === 'max_tokens') {
