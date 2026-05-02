@@ -822,20 +822,50 @@ async function scoreTest(){
     }
 
     const data = await res.json();
-    const text = data.content?.[0]?.text || '';
+    const rawText = data.content?.[0]?.text || '';
+    const stopReason = data.stop_reason || '';
+    // サーバ側で assistant を "{" で prefill しているので、先頭に "{" を補う
+    let text = '{' + rawText;
+
+    // 途中切れ（max_tokens 到達）は閉じ括弧が無いので、その時点までで打ち切って復旧を試みる
+    if (stopReason === 'max_tokens') {
+      console.warn('Response was truncated by max_tokens. Attempting to recover.');
+    }
+
+    // JSON 部分を抽出（コードフェンスや前後のごみが万一混じっていても拾えるように）
     const m = text.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('JSON not found');
-    result = JSON.parse(m[0]);
+    let jsonStr = m ? m[0] : text;
+
+    // よくある汚れを掃除：末尾カンマ、全角ダブルクォート、制御文字
+    jsonStr = jsonStr
+      .replace(/,\s*([}\]])/g, '$1')   // 末尾の不要なカンマ
+      .replace(/[“”]/g, '"') // “ ” → "
+      .replace(/[‘’]/g, "'") // ‘ ’ → '
+      .replace(/[ -
+-]/g, '');
+
+    try {
+      result = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      // 途中切れ等で末尾が壊れているとき：閉じ括弧を補って再挑戦
+      const repaired = repairTruncatedJson(jsonStr);
+      console.warn('JSON parse failed, retrying with repaired string. Original error:', parseErr.message);
+      console.warn('Raw text was:', rawText);
+      result = JSON.parse(repaired);
+    }
 
   } catch (e) {
     console.error('採点に失敗しました：', e);
     $('loadingOverlay').classList.remove('active');
+    const isTruncated = String(e.message || '').includes('JSON');
     alert(
       '採点できませんでした。\n\n' +
-      '下のどれかが原因かもしれません：\n' +
-      '・インターネットに接続されていない\n' +
-      '・APIキーが正しくない／残高切れ\n' +
-      '・写真がぶれている、暗い、斜めすぎる\n\n' +
+      (isTruncated
+        ? '答案の情報量が多くて、AI の回答が途中で切れた可能性があります。\n用紙を分けて撮るか、もう一度撮り直してみてください。\n\n'
+        : '下のどれかが原因かもしれません：\n' +
+          '・インターネットに接続されていない\n' +
+          '・APIキーが正しくない／残高切れ\n' +
+          '・写真がぶれている、暗い、斜めすぎる\n\n') +
       '「撮り直し」からもう一度撮影してください。\n\n' +
       '[技術的なエラー] ' + (e.message || e)
     );
@@ -844,6 +874,45 @@ async function scoreTest(){
 
   $('loadingOverlay').classList.remove('active');
   showResult(result);
+}
+
+// ============================================
+// 途中で切れた JSON を雑に復旧する
+// （max_tokens 到達などで末尾が壊れた場合に呼ばれる）
+// ============================================
+function repairTruncatedJson(s){
+  // 文字列の途中で切れていたら、最後の "（エスケープでない）以降を捨てる
+  let inStr = false;
+  let escape = false;
+  let lastSafe = -1; // 文字列の外側で最後に出た位置
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\' && inStr) { escape = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (!inStr) lastSafe = i;
+  }
+  let body = inStr ? s.slice(0, lastSafe + 1) : s;
+
+  // 末尾の不完全な要素（カンマ・コロン直後で終わってる場合）を削る
+  body = body.replace(/[,:\s]+$/g, '');
+
+  // 開いている括弧を数えて、閉じ括弧を補う
+  const stack = [];
+  let inS = false, esc = false;
+  for (const c of body) {
+    if (esc) { esc = false; continue; }
+    if (c === '\\' && inS) { esc = true; continue; }
+    if (c === '"') { inS = !inS; continue; }
+    if (inS) continue;
+    if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}') { if (stack[stack.length-1] === '{') stack.pop(); }
+    else if (c === ']') { if (stack[stack.length-1] === '[') stack.pop(); }
+  }
+  while (stack.length) {
+    body += stack.pop() === '{' ? '}' : ']';
+  }
+  return body;
 }
 
 // ============================================
