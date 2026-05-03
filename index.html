@@ -363,6 +363,20 @@
     line-height: 1;
   }
   .score-label { color: #888; font-size: 13px; letter-spacing: 1px; }
+  .score-tier {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ff4f7e;
+    margin-top: 2px;
+    letter-spacing: 1px;
+  }
+  .section-title {
+    font-weight: bold;
+    color: #ff4f7e;
+    font-size: 15px;
+    margin: 14px 0 6px;
+    text-align: left;
+  }
   .correct-ratio {
     font-size: 22px;
     font-weight: bold;
@@ -467,12 +481,48 @@
     border-radius: 4px;
   }
   .item-feedback {
-    font-size: 12px;
-    color: #555;
-    line-height: 1.5;
+    font-size: 13px;
+    color: #444;
+    line-height: 1.6;
+    margin-top: 6px;
+  }
+  .feedback-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     margin-top: 4px;
   }
-  .item-feedback b { color: #ff4f7e; }
+  .feedback-tag {
+    background: #fff;
+    border: 1.5px solid #ffd6e4;
+    color: #ff4f7e;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: bold;
+    flex-shrink: 0;
+    line-height: 1.5;
+  }
+  .feedback-tag.next {
+    border-color: #ffd6a8;
+    color: #ff7a00;
+    background: #fff8ee;
+  }
+  .item-mark { font-size: 26px; margin-left: auto; }
+  .item-kanji-row .label-tag {
+    background: #f5f5f5;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: #888;
+    margin-right: 4px;
+    align-self: center;
+  }
+  .item-kanji-row .label-tag.you  { background: #fff0f6; color: #ff4f7e; }
+  .item-kanji-row .label-tag.ans  { background: #e8f7ee; color: #2fa84a; }
+  .handwriting-bar {
+    height: 12px !important;
+  }
 
   /* ===== ご褒美 ===== */
   .reward-list { margin-top: 14px; text-align: left; }
@@ -621,6 +671,7 @@
     <div class="result-summary">
       <div class="score-label">総合スコア</div>
       <div class="score-number" id="scoreNumber">-</div>
+      <div class="score-tier" id="scoreTier">-</div>
       <div class="stars" id="scoreStars">☆☆☆☆☆</div>
       <div class="correct-ratio" id="correctRatio">
         <span class="num" id="correctCount">0</span> / <span id="totalCount">0</span> 問 正解
@@ -632,13 +683,13 @@
       <div class="gained-points" id="gainedPoints" style="display:none">+0 pt</div>
     </div>
 
-    <div style="font-weight:bold;color:#ff4f7e;font-size:14px;margin:12px 0 4px;text-align:left">
+    <div class="section-title">
       📝 問題ごとの結果
     </div>
     <div class="item-list" id="itemList"></div>
 
     <button class="score-btn" style="margin-top:10px;width:100%" onclick="closeResult()">
-      つぎのテストへ！
+      次のテストへ！
     </button>
   </div>
 </div>
@@ -701,20 +752,14 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
   ③ ①と②を突き合わせて正誤を判定する。
 - 問題文から正解が一意に決められないとき（例：ふりがなが読めない、問題文が写っていない等）は、correct_kanji を "?" とし、is_correct を false、improve に「問題文が読み取れなかったよ」と入れてください。この場合も、手書きに合わせて正解を作ってはいけません。
 
-【問題文がない場合の扱い（熟語判定 → きれいさ評価）】
-- 「次の□に漢字を書きなさい」「読みを書きなさい」などの **明示的な出題文が無い** 場合でも、いきなり beauty モードに落とさず、まず次の順序で確認してください：
-  1. **解答欄の前後（左右・上下・列方向）に印刷された漢字またはひらがながあるか**を確認する。
-  2. その印刷文字と、解答欄に書くべき文字を組み合わせて **熟語・単語・送り仮名つきの和語** などが成立するなら、上の【熟語としての判定】ルールに従って正解を決定し、その項目は **judge モード** として正誤判定する。
-     例：印刷「校」＋空欄、印刷「学」＋空欄＋印刷「校」、印刷「うつく」＋空欄、なぞり書きの薄字でなく **手本の漢字＋空欄** が並んでいる、など。
-  3. **どの方向にも印刷文字が無く、純粋に空欄や練習マスだけ**が並んでいる場合（漢字練習帳、書写プリント、ただ漢字を並べて書くだけの紙、なぞり書きのみ等）に限り、**きれいさ評価モード（beauty モード）** として扱う。
-- すなわち：
-  - "mode": "judge" … 通常の出題文がある場合、または前後の印刷文字から熟語・単語として正解が決められる場合。
-  - "mode": "beauty" … 文脈になり得る印刷文字が周囲に一切無い場合。
-- 省略時は judge とみなします。同じ紙の中で **項目ごと** にモードを使い分けて構いません（例：右半分に手本の漢字付きの空欄＝judge、左半分はなぞり書き＝beauty）。
+【問題文がない場合（きれいさ評価モード）】
+- 解答欄の周囲に問題文（出題形式・ふりがな・例文・空欄補充の文など）が**一切印刷されていない**場合（漢字練習帳、書写プリント、ただ漢字や言葉が並んでいるだけの紙、なぞり書き等）は、その項目を **きれいさ評価モード** として扱ってください。前後の文字から熟語を推測して正解を作るような処理はしないでください。
+- きれいさ評価モードでは、各項目に "mode": "beauty" を入れてください。通常の正誤判定モードでは "mode": "judge" を入れてください（省略時は judge とみなします）。
+- 同じ紙の中に問題文付きの設問と問題文なしの練習が混在しているときは、**項目ごと**にモードを使い分けてください。
 - きれいさ評価モードでは正誤の判定は行いません：
   - correct_kanji と student_answer の両方に「実際に書かれた文字」を入れてください（書かれた文字をそのまま素直に読み取ること。正解を勝手に推測しないこと）。
   - is_correct は常に true にしてください（× で減点扱いにしないため）。
-  - 評価の中心は handwriting_score（字形バランス、とめ・はね・はらい、線の長短、マスに収まっているか）です。**0〜100 で厳しすぎず、ただし通常モードよりはきれいさ重視で**評価してください。
+  - 評価の中心は handwriting_score（字形バランス、とめ・はね・はらい、線の長短、マスに収まっているか、画の交わり方）です。基準は judge モードと同じで **やや厳しめ**（90以上はほぼ非の打ちどころない字／70〜89は小さな乱れあり／50〜69は崩れが目立つ／30〜49は形が大きく崩れている／0〜29は判読困難）。**褒めるためだけに高得点を付けないこと**。
   - good / improve は、字形・線・バランス・とめはねはらい等の書き方の良し悪しに焦点を当て、漢字の意味や送り仮名には触れないでください。
 - total_questions と correct_count は **judge モードの項目だけ** カウントしてください（beauty モードの項目は分母にも分子にも入れない）。全項目が beauty モードのときは total_questions=0、correct_count=0 で構いません。
 - overall_score は、judge モードの項目の正解率と beauty モードの項目の handwriting_score 平均を組み合わせて 0〜100 で出してください。全項目が beauty モードのときは handwriting_score の平均をそのまま overall_score にしてください。
@@ -728,20 +773,6 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
   ・「□にあてはまる漢字を書きなさい」→ 前後の語句から入る漢字を決める。
 - 同音異義語・同訓異字（例：「はかる（計・測・量・図・謀）」「あう（会・合・遭）」「つく（付・着・就・突）」など）は、**必ず例文の文脈**から適切な字を選んでください。手書きに引っ張られないこと。
 - 送り仮名は問題文中の──線や空欄の区切りに従って正解を決めてください（例：問題文が「はし**る**」と送り仮名まで示していれば正解は「走る」、「はしる」全体に線があれば「走る」）。
-
-【熟語としての判定（前後の文字から決める）】
-- 解答がそれだけでは一意に決まりにくい問題（特に空欄補充・同音異義・同訓異字）では、**前後に印刷されている漢字・ひらがなと組み合わせて成立する熟語**を優先して正解を決めてください。
-- 具体的なやり方：
-  - 解答欄の **直前・直後の印刷された漢字** と組み合わせて 2 字熟語（または 3 字熟語）になるかを必ず考える。
-    例：問題文が「□校に行く」なら、空欄＋「校」で成立する 2 字熟語は「学校」「校外」「母校」など。文脈「行く」とも合う「学校」が最有力 → 正解は「学」。
-    例：「正□」で例文が「答えが正しい」なら「正解」、「会社の上司」なら「正社員ではないが上司＝正直ではないため再検討」のように、熟語＋例文の両方で絞る。
-  - 解答欄の **前後のひらがな** とつないで読みやすい単語（送り仮名込みの和語、慣用句、四字熟語の一部など）を作れるかも確認する。
-    例：「□きく」（おおきく）なら「大きく」、「うつく□い」（うつくしい）なら「美しい」。
-  - 同音異義・同訓異字の選択でも、前後の漢字との熟語成立を最優先のヒントにすること。
-    例：「□長」が「校長」「会長」「身長」のどれかは、問題文の文脈と、前後にある別の単語との熟語整合性で判断。
-    例：「気が□う」と「友達と□う」では、同じ「あう」でも前者は「合う」、後者は「会う」を選ぶ。
-- 注意：熟語推論はあくまで **「問題文に印刷されている文字」と「子どもが書くべき漢字」** を組み合わせて考えること。**子どもの手書き文字を熟語の一部として使ってはいけません**（手書きを見て「この熟語にしよう」と逆算するのは禁止）。
-- 熟語として複数候補が成立し、例文の文脈でも一意に絞れない場合は、もっとも一般的な小学校レベルの熟語を選び、improve に「他の答えも考えられる問題だよ」と一言入れてください。
 
 【手書きの読み取りの心得】
 - 解答欄の文字は、あくまで「子どもが実際に書いた文字」として、形のまま読み取ってください。正解に寄せて読んではいけません。
@@ -760,9 +791,28 @@ const systemPrompt = `あなたは小学生の漢字テストを採点する先�
    - 印刷された問題番号がある場合はそれを優先し、なければ上記の縦書き順で no を 1 から振ること。
 2. **解答欄を見る前に**、問題文だけから各設問の正解（correct_kanji）を決定する。
 3. 解答欄に手書きされた文字を、上の【手書きの読み取りの心得】に従って、正解に引きずられず素直に読み取り、student_answer に入れる。
-4. correct_kanji と student_answer を比較して正誤を判定する。文字・送り仮名も含めて完全一致なら正解、違えば不正解。1画でも欠けていたり余分な画があれば不正解扱い。ただし「とめ・はね・はらい」のわずかなブレは正解扱い。
-5. 書き方（字形バランス、とめ・はね・はらい、線の長短、マスに収まっているか）を 0〜100 点で評価する。採点は「小学生向けの標準バランス基準」で、やさしめに。
-6. 良い点と改善点を一言ずつ、子どもが前向きになれる言葉で。
+4. correct_kanji と student_answer を比較して正誤を判定する。次の場合はすべて **不正解** とすること：
+   - 文字そのものが違う（似た形の別字を書いている）。
+   - 1画でも欠けている、余分な画がある、画が切れて分かれている、つながっているべき画が離れている。
+   - 送り仮名・助詞が違う（過不足がある、ひらがなが間違っている）。
+   - 「とめ・はね・はらい」を **書くべき箇所で明らかに書いていない**、または **書くべきでない箇所で大きく出ている**。漢字テストの採点基準として、これは正誤判定に含める。
+   - ただし、形は正しく書けていて、はね・はらいの長さが少し短い／少しブレている程度の **軽微なゆらぎ** だけなら正解扱いにしてよい。
+5. 書き方（字形バランス、とめ・はね・はらい、線の長短、マスに収まっているか、画の交わり方、左右上下のバランス、とめるべき所の処理）を 0〜100 点で評価する。基準は **小学校の漢字書き取り採点基準** に合わせて **やや厳しめ** に：
+   - 90 以上：手本に近い、ほぼ非の打ちどころのない字。
+   - 70〜89：基本的に整っているが、バランスや線の長短に小さな乱れがある。
+   - 50〜69：形は伝わるが、複数のバランス崩れ・線のはみ出し・とめはねの曖昧さが目立つ。
+   - 30〜49：字としては読めるが、形が大きく崩れている／マスに収まっていない／とめはねがほとんど守れていない。
+   - 0〜29：判読が難しい、別の字に見える、極端に崩れている。
+   気持ちよく褒めるためだけに高得点を付けないこと。実際の出来に応じて点を割り振る。
+6. 良い点と改善点を一言ずつ、子どもが前向きになれる言葉で。改善点は「次に直せば点が伸びるところ」を具体的に書く。
+
+【言葉づかい（出力ルール：小学校高学年向け）】
+- overall_comment / good / improve / question は **小学校高学年（4〜6 年生）** が読んで自然に理解できる言葉で書いてください。
+  - 漢字は **小学校 6 年生までに習う漢字** までを目安に使ってよい（無理に全部ひらがなにしない）。それより難しい漢字や熟語はひらがなに開く、または易しい言い換えにする。
+  - 「画（かく）」「とめ・はね・はらい」「バランス」「線の長短」など、書写でよく使う言葉はそのまま使って構いません。
+  - 一文は 30 字以内を目安に、簡潔に。子ども扱いしすぎず、ふだんの先生の口調を意識：「〜できているね」「〜を意識するともっと良くなるよ」「ここがおしい」など、敬意のある語り口にする。べたべたした幼い口調（「〜だよぉ」「〜だねぇ」）は避ける。
+  - できている点をきちんとほめたうえで、改善点は **具体的に 1 つ** に絞って伝える。「もう少し」「ちょっと」で終わらせず、「○○の部分を△△にすると、もっと整って見える」のように、何をどう直せばよいかを書く。
+  - 否定的な決めつけ（「だめ」「下手」など）は使わない。前向きな言い回しで、本人がやる気になれる伝え方を心がける。
 
 【出力】
 必ず以下のJSON形式のみで返答してください（前後に余計な文字を入れない）。必ず日本語で返答してください。
@@ -1120,6 +1170,16 @@ async function scoreTest(){
 // 途中で切れた JSON を雑に復旧する
 // （max_tokens 到達などで末尾が壊れた場合に呼ばれる）
 // ============================================
+// 点数帯ごとに、一目で出来栄えがわかる短いメッセージを返す（小学校高学年向け）
+function scoreTierMessage(score){
+  if (score >= 95) return '🎉 パーフェクト！';
+  if (score >= 85) return '✨ お見事！';
+  if (score >= 70) return '😊 よくできました！';
+  if (score >= 50) return '💪 もう一歩！';
+  if (score >= 30) return '🌱 練習あるのみ！';
+  return '👍 次に向けて頑張ろう！';
+}
+
 function repairTruncatedJson(s){
   // 文字列の途中で切れていたら、最後の "（エスケープでない）以降を捨てる
   let inStr = false;
@@ -1186,6 +1246,7 @@ function showResult(r, imageDataUrl){
   const fill = Math.round(overall / 20);
   $('scoreStars').textContent   = '★'.repeat(fill) + '☆'.repeat(5 - fill);
   $('overallComment').textContent = r.overall_comment || '-';
+  $('scoreTier').textContent    = scoreTierMessage(overall);
 
   // 正解数表示 / きれいさ平均表示の切り替え
   if (allBeauty) {
@@ -1223,7 +1284,7 @@ function showResult(r, imageDataUrl){
           <div class="item-mark">✏️</div>
         </div>
         <div class="item-kanji-row">
-          <span>書いた字</span>
+          <span class="label-tag you">書いた字</span>
           <span class="big">${escapeHtml(it.student_answer || it.correct_kanji || '-')}</span>
         </div>
         <div class="item-handwriting">
@@ -1232,34 +1293,35 @@ function showResult(r, imageDataUrl){
           <b>${hw}</b>
         </div>
         <div class="item-feedback">
-          <b>◎</b> ${escapeHtml(it.good || '-')}
-          <b>△</b> ${escapeHtml(it.improve || '-')}
+          <div class="feedback-row"><span class="feedback-tag">よかった点</span><span>${escapeHtml(it.good || '-')}</span></div>
+          <div class="feedback-row"><span class="feedback-tag next">改善ポイント</span><span>${escapeHtml(it.improve || '-')}</span></div>
         </div>
       `;
     } else {
       // 通常の正誤判定モード
       card.className = 'item-card ' + (it.is_correct ? 'correct' : 'wrong');
+      const judgeWord = it.is_correct ? '正解！' : 'おしい！';
       card.innerHTML = `
         <div class="item-head">
           <div class="item-num">${escapeHtml(String(it.no ?? '?'))}</div>
           <div>問${escapeHtml(String(it.no ?? ''))}</div>
-          <div class="item-mark">${it.is_correct ? '⭕' : '❌'}</div>
+          <div class="item-mark" title="${judgeWord}">${it.is_correct ? '⭕' : '❌'}</div>
         </div>
         ${it.question ? `<div class="item-q">${escapeHtml(it.question)}</div>` : ''}
         <div class="item-kanji-row">
-          <span>正解</span>
+          <span class="label-tag ans">正解</span>
           <span class="big">${escapeHtml(it.correct_kanji || '-')}</span>
-          <span style="margin-left:8px">あなた</span>
+          <span class="label-tag you" style="margin-left:8px">あなた</span>
           <span class="big ${it.is_correct ? '' : 'diff'}">${escapeHtml(it.student_answer || '-')}</span>
         </div>
         <div class="item-handwriting">
-          <span>書き方</span>
+          <span>字のきれいさ</span>
           <div class="handwriting-bar"><div style="width:${hw}%"></div></div>
           <b>${hw}</b>
         </div>
         <div class="item-feedback">
-          <b>◎</b> ${escapeHtml(it.good || '-')}
-          <b>△</b> ${escapeHtml(it.improve || '-')}
+          <div class="feedback-row"><span class="feedback-tag">よかった点</span><span>${escapeHtml(it.good || '-')}</span></div>
+          <div class="feedback-row"><span class="feedback-tag next">改善ポイント</span><span>${escapeHtml(it.improve || '-')}</span></div>
         </div>
       `;
     }
